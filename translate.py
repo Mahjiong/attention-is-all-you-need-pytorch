@@ -1,6 +1,8 @@
 """
-Usage: translate.py -model transformer_accu_43.572.chkpt -vocab D:\Work\[Archive]\transformer\data_small\vocab.pt -src input.txt
+Usage: translate.py -model exp\transformer_accu_43.572.chkpt -vocab D:\Work\[Archive]\transformer\data_small\vocab.pt -src exp\input.txt -output exp\prediction.txt
 """
+import codecs
+
 import torch
 import torch.utils.data
 import argparse
@@ -9,6 +11,7 @@ from tqdm import tqdm
 from dataset import collate_fn, TranslationDataset
 from transformer.Translator import Translator
 from preprocess import read_instances_from_file, convert_instance_to_idx_seq
+
 
 def main():
     parser = _build_parser()
@@ -33,13 +36,20 @@ def main():
 
     # do translation
     translator = Translator(opt)
-    with open(opt.output, 'w') as f:
+    with codecs.open(opt.output, 'w', 'utf-8') as f:
         for batch in tqdm(test_loader, mininterval=2, desc='  - (Test)', leave=False):
             all_hyp, all_scores = translator.translate_batch(*batch)
             for idx_seqs in all_hyp:
                 for idx_seq in idx_seqs:
-                    pred_line = ' '.join([test_loader.dataset.tgt_idx2word[idx] for idx in idx_seq])
-                    f.write(pred_line + '\n')
+                    eos = test_loader.dataset.tgt_word2idx['</s>']
+                    if eos in idx_seq:
+                        real_len = min(len(idx_seq), idx_seq.index(eos))
+                    else:
+                        real_len = len(idx_seq)
+                    eos_line = idx_seq[:real_len]
+                    prediction_line = ' '.join([test_loader.dataset.tgt_idx2word[idx] for idx in eos_line])
+
+                    f.write(prediction_line + '\n')
     print('[Info] Finished.')
 
 
@@ -54,7 +64,7 @@ def _build_parser():
 
     parser.add_argument('-beam_size', type=int, default=5, help='Beam size')
     parser.add_argument('-batch_size', type=int, default=30, help='Batch size')
-    parser.add_argument('-n_best', type=int, default=1)
+    parser.add_argument('-n_best', type=int, default=3)
     return parser
 
 
