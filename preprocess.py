@@ -1,14 +1,20 @@
-''' Handling the data io '''
+"""
+Usage: preprocess.py -data_dir D:\Work\[Archive]\transformer\data_small
+"""
 import argparse
+import codecs
+import os
+
 import torch
 import transformer.Constants as Constants
+
 
 def read_instances_from_file(inst_file, max_sent_len, keep_case):
     ''' Convert file into word seq lists and vocab '''
 
     word_insts = []
     trimmed_sent_count = 0
-    with open(inst_file) as f:
+    with codecs.open(inst_file, 'r', 'utf-8') as f:
         for sent in f:
             if not keep_case:
                 sent = sent.lower()
@@ -29,6 +35,7 @@ def read_instances_from_file(inst_file, max_sent_len, keep_case):
               .format(trimmed_sent_count, max_sent_len))
 
     return word_insts
+
 
 def build_vocab_idx(word_insts, min_word_count):
     ''' Trim vocab by number of occurence '''
@@ -61,33 +68,28 @@ def build_vocab_idx(word_insts, min_word_count):
     print("[Info] Ignored word count = {}".format(ignored_word_count))
     return word2idx
 
+
 def convert_instance_to_idx_seq(word_insts, word2idx):
     ''' Mapping words to idx sequence. '''
     return [[word2idx.get(w, Constants.UNK) for w in s] for s in word_insts]
 
+
 def main():
-    ''' Main function '''
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-train_src', required=True)
-    parser.add_argument('-train_tgt', required=True)
-    parser.add_argument('-valid_src', required=True)
-    parser.add_argument('-valid_tgt', required=True)
-    parser.add_argument('-save_data', required=True)
-    parser.add_argument('-max_len', '--max_word_seq_len', type=int, default=50)
-    parser.add_argument('-min_word_count', type=int, default=5)
-    parser.add_argument('-keep_case', action='store_true')
-    parser.add_argument('-share_vocab', action='store_true')
-    parser.add_argument('-vocab', default=None)
-
+    parser = _build_parser()
     opt = parser.parse_args()
-    opt.max_token_seq_len = opt.max_word_seq_len + 2 # include the <s> and </s>
+
+    opt.max_token_seq_len = opt.max_len + 2  # include the <s> and </s>
+    # deduced variables
+    opt.train_src = os.path.join(opt.data_dir, 'train.en')
+    opt.train_tgt = os.path.join(opt.data_dir, 'train.zh')
+    opt.valid_src = os.path.join(opt.data_dir, 'valid.en')
+    opt.valid_tgt = os.path.join(opt.data_dir, 'valid.zh')
 
     # Training set
     train_src_word_insts = read_instances_from_file(
-        opt.train_src, opt.max_word_seq_len, opt.keep_case)
+        opt.train_src, opt.max_len, opt.keep_case)
     train_tgt_word_insts = read_instances_from_file(
-        opt.train_tgt, opt.max_word_seq_len, opt.keep_case)
+        opt.train_tgt, opt.max_len, opt.keep_case)
 
     if len(train_src_word_insts) != len(train_tgt_word_insts):
         print('[Warning] The training instance count is not equal.')
@@ -95,15 +97,15 @@ def main():
         train_src_word_insts = train_src_word_insts[:min_inst_count]
         train_tgt_word_insts = train_tgt_word_insts[:min_inst_count]
 
-    #- Remove empty instances
+    # - Remove empty instances
     train_src_word_insts, train_tgt_word_insts = list(zip(*[
         (s, t) for s, t in zip(train_src_word_insts, train_tgt_word_insts) if s and t]))
 
     # Validation set
     valid_src_word_insts = read_instances_from_file(
-        opt.valid_src, opt.max_word_seq_len, opt.keep_case)
+        opt.valid_src, opt.max_len, opt.keep_case)
     valid_tgt_word_insts = read_instances_from_file(
-        opt.valid_tgt, opt.max_word_seq_len, opt.keep_case)
+        opt.valid_tgt, opt.max_len, opt.keep_case)
 
     if len(valid_src_word_insts) != len(valid_tgt_word_insts):
         print('[Warning] The validation instance count is not equal.')
@@ -111,7 +113,7 @@ def main():
         valid_src_word_insts = valid_src_word_insts[:min_inst_count]
         valid_tgt_word_insts = valid_tgt_word_insts[:min_inst_count]
 
-    #- Remove empty instances
+    # - Remove empty instances
     valid_src_word_insts, valid_tgt_word_insts = list(zip(*[
         (s, t) for s, t in zip(valid_src_word_insts, valid_tgt_word_insts) if s and t]))
 
@@ -144,11 +146,11 @@ def main():
     train_tgt_insts = convert_instance_to_idx_seq(train_tgt_word_insts, tgt_word2idx)
     valid_tgt_insts = convert_instance_to_idx_seq(valid_tgt_word_insts, tgt_word2idx)
 
+    vocab = {
+        'src': src_word2idx,
+        'tgt': tgt_word2idx
+    }
     data = {
-        'settings': opt,
-        'dict': {
-            'src': src_word2idx,
-            'tgt': tgt_word2idx},
         'train': {
             'src': train_src_insts,
             'tgt': train_tgt_insts},
@@ -156,9 +158,25 @@ def main():
             'src': valid_src_insts,
             'tgt': valid_tgt_insts}}
 
-    print('[Info] Dumping the processed data to pickle file', opt.save_data)
-    torch.save(data, opt.save_data)
+    print('[Info] Dump settings')
+    torch.save(opt, os.path.join(opt.data_dir, 'setting.pt'))
+    print('[Info] Dump vocabulary')
+    torch.save(vocab, os.path.join(opt.data_dir, 'vocab.pt'))
+    print('[Info] Dump training data')
+    torch.save(data, os.path.join(opt.data_dir, 'data.pt'))
     print('[Info] Finish.')
+
+
+def _build_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-data_dir', required=True)
+    parser.add_argument('-max_len', type=int, default=50)
+    parser.add_argument('-min_word_count', type=int, default=5)
+    parser.add_argument('-keep_case', action='store_true', default=True)
+    parser.add_argument('-share_vocab', action='store_true', default=False)
+    parser.add_argument('-vocab', default=None)
+    return parser
+
 
 if __name__ == '__main__':
     main()

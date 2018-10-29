@@ -1,9 +1,11 @@
-'''
-This script handling the training process.
-'''
-
+"""
+Usage: train.py -data_dir D:\Work\[Archive]\transformer\data_small -epoch 1
+Simple:
+train.py -data_dir D:\Work\[Archive]\transformer\data_small -epoch 1 -batch_size 20 -d_model 128 -d_inner_hid 512 -n_head 4 -n_layers 2 n_warmup_steps 100
+"""
 import argparse
 import math
+import os
 import time
 
 from tqdm import tqdm
@@ -194,15 +196,18 @@ def train(model, training_data, validation_data, optimizer, device, opt):
 def main():
     parser = _build_parser()
     opt = parser.parse_args()
-    opt.cuda = not opt.no_cuda
+
     # fixme word vector must have same size as model internal
     opt.d_word_vec = opt.d_model
 
     # ========= Loading Dataset =========#
-    data = torch.load(opt.data)
-    opt.max_token_seq_len = data['settings'].max_token_seq_len
+    setting = torch.load(os.path.join(opt.data_dir, 'setting.pt'))
+    vocab = torch.load(os.path.join(opt.data_dir, 'vocab.pt'))
+    data = torch.load(os.path.join(opt.data_dir, 'data.pt'))
 
-    training_data, validation_data = prepare_dataloaders(data, opt)
+    # data = torch.load(opt.data)
+    opt.max_token_seq_len = setting.max_token_seq_len
+    training_data, validation_data = prepare_dataloaders(opt, data, vocab)
 
     opt.src_vocab_size = training_data.dataset.src_vocab_size
     opt.tgt_vocab_size = training_data.dataset.tgt_vocab_size
@@ -214,7 +219,7 @@ def main():
 
     print(opt)
 
-    device = torch.device('cuda' if opt.cuda else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     transformer = Transformer(
         opt.src_vocab_size,
         opt.tgt_vocab_size,
@@ -241,7 +246,8 @@ def main():
 
 def _build_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-data', required=True)
+    parser.add_argument('-data_dir', required=True)
+
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument('-batch_size', type=int, default=64)
     # parser.add_argument('-d_word_vec', type=int, default=512)
@@ -254,22 +260,22 @@ def _build_parser():
     parser.add_argument('-n_warmup_steps', type=int, default=4000)
     parser.add_argument('-dropout', type=float, default=0.1)
     # source language and target language use same embedding table, don't use in (en, zh) pair
-    parser.add_argument('-embs_share_weight', action='store_true')
-    parser.add_argument('-proj_share_weight', action='store_true')
+    parser.add_argument('-embs_share_weight', action='store_true', default=False)
+    parser.add_argument('-proj_share_weight', action='store_true', default=False)
     parser.add_argument('-log', default=None)
     parser.add_argument('-save_model', default=None)
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
-    parser.add_argument('-no_cuda', action='store_true')
+    # parser.add_argument('-no_cuda', action='store_true')
     parser.add_argument('-label_smoothing', action='store_true')
     return parser
 
 
-def prepare_dataloaders(data, opt):
+def prepare_dataloaders(opt, data, vocab):
     # ========= Preparing DataLoader =========#
     train_loader = torch.utils.data.DataLoader(
         TranslationDataset(
-            src_word2idx=data['dict']['src'],
-            tgt_word2idx=data['dict']['tgt'],
+            src_word2idx=vocab['src'],
+            tgt_word2idx=vocab['tgt'],
             src_insts=data['train']['src'],
             tgt_insts=data['train']['tgt']),
         num_workers=2,
@@ -279,8 +285,8 @@ def prepare_dataloaders(data, opt):
 
     valid_loader = torch.utils.data.DataLoader(
         TranslationDataset(
-            src_word2idx=data['dict']['src'],
-            tgt_word2idx=data['dict']['tgt'],
+            src_word2idx=vocab['src'],
+            tgt_word2idx=vocab['tgt'],
             src_insts=data['valid']['src'],
             tgt_insts=data['valid']['tgt']),
         num_workers=2,
