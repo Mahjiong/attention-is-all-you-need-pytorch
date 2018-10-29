@@ -1,7 +1,7 @@
 """
 Usage: train.py -data_dir D:\Work\[Archive]\transformer\data_small -epoch 1
 Simple:
-train.py -data_dir D:\Work\[Archive]\transformer\data_small -epoch 1 -batch_size 20 -d_model 128 -d_inner_hid 512 -n_head 4 -n_layers 2 n_warmup_steps 100
+train.py -data_dir D:\Work\[Archive]\transformer\data_small -epoch 2 -batch_size 20 -d_model 128 -d_inner_hid 512 -n_head 4 -n_layers 2 -n_warmup_steps 100 -save_model transformer -save_mode all
 """
 import argparse
 import math
@@ -56,8 +56,6 @@ def cal_loss(pred, gold, smoothing):
 
 
 def train_epoch(model, training_data, optimizer, device, smoothing):
-    ''' Epoch operation in training phase'''
-
     model.train()
 
     total_loss = 0

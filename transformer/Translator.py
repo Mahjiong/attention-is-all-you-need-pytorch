@@ -12,7 +12,7 @@ class Translator(object):
 
     def __init__(self, opt):
         self.opt = opt
-        self.device = torch.device('cuda' if opt.cuda else 'cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         checkpoint = torch.load(opt.model)
         model_opt = checkpoint['settings']
